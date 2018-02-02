@@ -177,3 +177,7 @@ target_link_libraries(FunctionGraph
         )
 
 target_link_libraries(FunctionGraph ${Boost_LIBRARIES})
+
+add_custom_command(TARGET FunctionGraph POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_SOURCE_DIR}/include $<TARGET_FILE_DIR:FunctionGraph>/include)

@@ -24,13 +24,24 @@ public:
     void generateASTMatches(MatchFinder *finder);
 
 private:
-    std::vector<std::string> functions;
-    std::vector<std::pair<std::string, std::string>> callRel;
+    const std::string INSTANCE_FLAG = "$INSTANCE";
+    const std::string CLASS_FLAG = "cClass";
+    const std::string FUNCTION_FLAG = "cFunction";
+    const std::string CONTAIN_FLAG = "contain";
+    const std::string CALL_FLAG = "call";
 
-    enum {FUNC_DEC = 0, FUNC_CALLER, FUNC_CALLEE};
-    const char* types[3] = {"func_dec", "caller", "callee"};
+    std::vector<std::string> functions;
+    std::vector<std::string> classes;
+    std::vector<std::pair<std::string, std::string>> callRel;
+    std::vector<std::pair<std::string, std::string>> containRel;
+
+    enum {FUNC_DEC = 0, FUNC_CALLER, FUNC_CALLEE, CLASS_DEC};
+    const char* types[4] = {"func_dec", "caller", "callee", "class_dec"};
 
     bool isInSystemHeader(const MatchFinder::MatchResult &result, const clang::Decl *decl);
+    bool exists(std::vector<std::string> list, std::string item);
+
+    void addParentClass(const MatchFinder::MatchResult &result, const clang::FunctionDecl *decl);
 };
 
 
