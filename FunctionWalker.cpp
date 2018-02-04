@@ -5,6 +5,8 @@
 #include "FunctionWalker.h"
 #include <iostream>
 #include <fstream>
+#include <openssl/md5.h>
+#include <cstring>
 
 using namespace clang;
 using namespace clang::tooling;
@@ -26,17 +28,17 @@ void FunctionWalker::printGraph(std::string filename) {
     outputFile << endl;
 
     for (string function : functions){
-        outputFile << INSTANCE_FLAG << " " << function << " " << FUNCTION_FLAG << endl;
+        outputFile << INSTANCE_FLAG << " " << getMD5(function) << " " << FUNCTION_FLAG << endl;
     }
     outputFile << endl;
 
     for (pair<string, string> contain : containRel){
-        outputFile << CONTAIN_FLAG << " " << contain.first << " " << contain.second << endl;
+        outputFile << CONTAIN_FLAG << " " << contain.first << " " << getMD5(contain.second) << endl;
     }
     outputFile << endl;
 
     for (pair<string, string> call : callRel){
-        outputFile << CALL_FLAG << " " << call.first << " " << call.second << endl;
+        outputFile << CALL_FLAG << " " << getMD5(call.first) << " " << getMD5(call.second) << endl;
     }
     outputFile << endl;
 
@@ -50,7 +52,7 @@ void FunctionWalker::run(const MatchFinder::MatchResult &result){
         //Get whether we have a system header.
         if (isInSystemHeader(result, functionDecl)) return;
 
-        string funcName = functionDecl->getQualifiedNameAsString();
+        string funcName = generateID(result, functionDecl);
         replace(funcName.begin(), funcName.end(), ':', '-');
 
         if (!exists(functions, funcName)) {
@@ -65,8 +67,8 @@ void FunctionWalker::run(const MatchFinder::MatchResult &result){
         //Get whether this call expression is a system header.
         if (isInSystemHeader(result, callee)) return;
 
-        string calleeName = callee->getQualifiedNameAsString();
-        string callerName = caller->getQualifiedNameAsString();
+        string calleeName = generateID(result, callee);
+        string callerName = generateID(result, caller);
         replace(calleeName.begin(), calleeName.end(), ':', '-');
         replace(callerName.begin(), callerName.end(), ':', '-');
 
@@ -124,6 +126,91 @@ bool FunctionWalker::exists(vector<string> list, string item){
     return false;
 }
 
+string FunctionWalker::generateID(const MatchFinder::MatchResult &result, const NamedDecl* decl){
+    //Gets the canonical decl.
+    decl = dyn_cast<NamedDecl>(decl->getCanonicalDecl());
+    string name = "";
+
+    //Generates a special name for function overloading.
+    if (isa<FunctionDecl>(decl) || isa<CXXMethodDecl>(decl)){
+        const FunctionDecl* cur = decl->getAsFunction();
+        name = cur->getReturnType().getAsString() + "-" + decl->getNameAsString();
+        for (int i = 0; i < cur->getNumParams(); i++){
+            name += "-" + cur->parameters().data()[i]->getType().getAsString();
+        }
+    } else {
+        name = decl->getNameAsString();
+    }
+
+
+    bool getParent = true;
+    bool recurse = false;
+    const NamedDecl* originalDecl = decl;
+
+    //Get the parent.
+    auto parent = result.Context->getParents(*decl);
+    while(getParent){
+        //Check if it's empty.
+        if (parent.empty()){
+            getParent = false;
+            continue;
+        }
+
+        //Get the current decl as named.
+        decl = parent[0].get<clang::NamedDecl>();
+        if (decl) {
+            name = generateID(result, decl) + "::" + name;
+            recurse = true;
+            getParent = false;
+            continue;
+        }
+
+        parent = result.Context->getParents(parent[0]);
+    }
+
+    //Sees if no true qualified name was used.
+    Decl::Kind kind = originalDecl->getKind();
+    if (!recurse) {
+        if (kind != Decl::Function && kind == Decl::CXXMethod){
+            //We need to get the parent function.
+            const DeclContext *parentContext = originalDecl->getParentFunctionOrMethod();
+
+            //If we have nullptr, get the parent function.
+            if (parentContext != nullptr) {
+                string parentQualName = generateID(result, static_cast<const FunctionDecl *>(parentContext));
+                name = parentQualName + "::" + originalDecl->getNameAsString();
+            }
+        }
+    }
+
+    //Finally, check if we have a main method.
+    if (name.compare("int-main-int-char **") == 0 || name.compare("int-main") == 0){
+        name = result.Context->getSourceManager().getFilename(originalDecl->getLocStart()).str() + "--" + name;
+    }
+
+    return name;
+}
+
+
+string FunctionWalker::getMD5(string ID){
+    //Creates a digest buffer.
+    unsigned char digest[MD5_DIGEST_LENGTH];
+    const char* cText = ID.c_str();
+
+    //Initializes the MD5 string.
+    MD5_CTX ctx;
+    MD5_Init(&ctx);
+    MD5_Update(&ctx, cText, strlen(cText));
+    MD5_Final(digest, &ctx);
+
+    //Fills it with characters.
+    char mdString[MD5_LENGTH];
+    for (int i = 0; i < 16; i++)
+        sprintf(&mdString[i*2], "%02x", (unsigned int)digest[i]);
+
+    return string(mdString);
+}
+
 void FunctionWalker::addParentClass(const MatchFinder::MatchResult &result, const FunctionDecl *decl){
     //Use the manual walker system.
     bool getParent = true;
@@ -142,7 +229,7 @@ void FunctionWalker::addParentClass(const MatchFinder::MatchResult &result, cons
         //Get the current decl as named.
         classDecl = parent[0].get<clang::CXXRecordDecl>();
         if (classDecl) {
-            string functionName = decl->getQualifiedNameAsString();
+            string functionName = generateID(result, decl);
             string className = classDecl->getQualifiedNameAsString();
             replace(functionName.begin(), functionName.end(), ':', '-');
             replace(className.begin(), className.end(), ':', '-');
@@ -153,17 +240,5 @@ void FunctionWalker::addParentClass(const MatchFinder::MatchResult &result, cons
         }
 
         parent = result.Context->getParents(parent[0]);
-    }
-
-    //Checks if we can add a class reference (secondary attempt).
-    NestedNameSpecifier* declSpec = decl->getQualifier();
-    if (declSpec != nullptr && declSpec->getAsType() == nullptr)
-        classDecl = declSpec->getAsType()->getAsCXXRecordDecl();
-    if (classDecl != nullptr) {
-        string functionName = decl->getQualifiedNameAsString();
-        string className = classDecl->getQualifiedNameAsString();
-        replace(functionName.begin(), functionName.end(), ':', '-');
-        replace(className.begin(), className.end(), ':', '-');
-        containRel.emplace_back(pair<string, string>(className, functionName));
     }
 }

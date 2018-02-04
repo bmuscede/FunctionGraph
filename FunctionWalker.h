@@ -29,6 +29,7 @@ private:
     const std::string FUNCTION_FLAG = "cFunction";
     const std::string CONTAIN_FLAG = "contain";
     const std::string CALL_FLAG = "call";
+    int const MD5_LENGTH = 33;
 
     std::vector<std::string> functions;
     std::vector<std::string> classes;
@@ -40,6 +41,8 @@ private:
 
     bool isInSystemHeader(const MatchFinder::MatchResult &result, const clang::Decl *decl);
     bool exists(std::vector<std::string> list, std::string item);
+    std::string generateID(const MatchFinder::MatchResult &result, const clang::NamedDecl* decl);
+    std::string getMD5(std::string ID);
 
     void addParentClass(const MatchFinder::MatchResult &result, const clang::FunctionDecl *decl);
 };
