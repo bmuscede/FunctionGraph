@@ -2,7 +2,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 cmake_minimum_required(VERSION 3.9)
 project(FunctionGraph)
 
-find_package(Boost 1.58 COMPONENTS system filesystem REQUIRED)
+find_package(Boost 1.58 COMPONENTS system filesystem regex REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 
 set(LLVM_PATH /home/bmuscede/Applications/Clang/llvm-build)
@@ -181,3 +181,6 @@ target_link_libraries(FunctionGraph ${Boost_LIBRARIES})
 add_custom_command(TARGET FunctionGraph POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${CMAKE_SOURCE_DIR}/include $<TARGET_FILE_DIR:FunctionGraph>/include)
+add_custom_command(TARGET FunctionGraph POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy
+        ${CMAKE_SOURCE_DIR}/FuncIgnore.db $<TARGET_FILE_DIR:FunctionGraph>/FuncIgnore.db)

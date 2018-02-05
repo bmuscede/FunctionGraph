@@ -23,6 +23,8 @@ public:
     void run(const MatchFinder::MatchResult &result) override;
     void generateASTMatches(MatchFinder *finder);
 
+    void setIgnoreLibs(std::vector<std::string> libs);
+
 private:
     const std::string INSTANCE_FLAG = "$INSTANCE";
     const std::string CLASS_FLAG = "cClass";
@@ -30,6 +32,8 @@ private:
     const std::string CONTAIN_FLAG = "contain";
     const std::string CALL_FLAG = "call";
     int const MD5_LENGTH = 33;
+
+    std::vector<std::string> ignoreLibs;
 
     std::vector<std::string> functions;
     std::vector<std::string> classes;

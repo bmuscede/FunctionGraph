@@ -7,6 +7,9 @@
 #include <fstream>
 #include <openssl/md5.h>
 #include <cstring>
+#include <boost/algorithm/string/predicate.hpp>
+#include <boost/filesystem/path.hpp>
+#include <boost/filesystem/operations.hpp>
 
 using namespace clang;
 using namespace clang::tooling;
@@ -95,6 +98,10 @@ void FunctionWalker::generateASTMatches(MatchFinder *finder){
     finder->addMatcher(cxxRecordDecl(isClass()).bind(types[CLASS_DEC]), this);
 }
 
+void FunctionWalker::setIgnoreLibs(vector<string> libs){
+    ignoreLibs = libs;
+}
+
 bool FunctionWalker::isInSystemHeader(const MatchFinder::MatchResult &result, const Decl *decl){
     if (decl == nullptr) return false;
     bool isIn;
@@ -104,6 +111,16 @@ bool FunctionWalker::isInSystemHeader(const MatchFinder::MatchResult &result, co
         //Gets where this item is located.
         auto &SourceManager = result.Context->getSourceManager();
         auto ExpansionLoc = SourceManager.getExpansionLoc(decl->getLocStart());
+
+        //Now, check to see if we have a ROS library.
+        string libLoc = ExpansionLoc.printToString(SourceManager);
+        libLoc = libLoc.substr(0, libLoc.find(":"));
+        if (boost::algorithm::ends_with(libLoc, ".h") || boost::algorithm::ends_with(libLoc, ".hpp")){
+            boost::filesystem::path loc = boost::filesystem::canonical(boost::filesystem::path(libLoc));
+            for (string curLibrary : ignoreLibs){
+                if (loc.string().find(curLibrary) != string::npos) return true;
+            }
+        }
 
         //Checks if we have an invalid location.
         if (ExpansionLoc.isInvalid()) {
@@ -228,7 +245,7 @@ void FunctionWalker::addParentClass(const MatchFinder::MatchResult &result, cons
 
         //Get the current decl as named.
         classDecl = parent[0].get<clang::CXXRecordDecl>();
-        if (classDecl) {
+        if (classDecl && classDecl->isClass()) {
             string functionName = generateID(result, decl);
             string className = classDecl->getQualifiedNameAsString();
             replace(functionName.begin(), functionName.end(), ':', '-');

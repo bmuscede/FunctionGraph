@@ -14,14 +14,16 @@ using namespace boost::filesystem;
 using namespace clang::tooling;
 using namespace clang::ast_matchers;
 
-const std::string DEFAULT_START = "./FunctionGraph";
-const std::string INCLUDE_DIR = "./include";
-const std::string INCLUDE_DIR_LOC = "--extra-arg=-I" + INCLUDE_DIR;
+const string DEFAULT_START = "./FunctionGraph";
+const string INCLUDE_DIR = "./include";
+const string INCLUDE_DIR_LOC = "--extra-arg=-I" + INCLUDE_DIR;
 const int BASE_LEN = 2;
 const string OUTPUT_FILENAME = "output.ta";
 const string C_FILE_EXT = ".c";
 const string CPLUS_FILE_EXT = ".cc";
 const string CPLUSPLUS_FILE_EXT = ".cpp";
+
+const string IGNORE_FILES = "FuncIgnore.db";
 
 vector<path> files;
 vector<std::string> ext;
@@ -92,6 +94,27 @@ int addDirectory(const path directory){
     return numAdded;
 }
 
+string trim(string& str) {
+    size_t first = str.find_first_not_of(' ');
+    size_t last = str.find_last_not_of(' ');
+    return str.substr(first, (last-first+1));
+}
+
+vector<string> loadLibraries(string libs){
+    vector<string> output;
+    string line;
+
+    std::ifstream inputFile(libs);
+    while(getline(inputFile, line)){
+        line = trim(line);
+        if (line[0] == '#' || line.length() == 0) continue;
+
+        output.push_back(line);
+    }
+
+    return output;
+}
+
 int main() {
     ext.push_back(C_FILE_EXT);
     ext.push_back(CPLUS_FILE_EXT);
@@ -130,7 +153,11 @@ int main() {
     ClangTool Tool(OptionsParser.getCompilations(),
                    OptionsParser.getSourcePathList());
 
+    //Generates files to ignore.
+    vector<string> pathsToIgnore = loadLibraries(IGNORE_FILES);
+
     auto walker = new FunctionWalker();
+    walker->setIgnoreLibs(pathsToIgnore);
 
     //Generates a matcher system.
     MatchFinder finder;
