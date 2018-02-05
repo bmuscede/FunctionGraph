@@ -1,5 +1,6 @@
 #include <iostream>
 #include <vector>
+#include <fstream>
 #include <boost/filesystem.hpp>
 #include "clang/Frontend/FrontendAction.h"
 #include "clang/Tooling/Tooling.h"
